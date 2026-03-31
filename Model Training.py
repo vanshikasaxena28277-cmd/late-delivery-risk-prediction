@@ -8,7 +8,7 @@
 #   2. Place the CSV in the same folder as this script
 #   3. Run: python model_training.py
 # ============================================================
- 
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,7 +16,7 @@ import seaborn as sns
 import warnings
 import os
 warnings.filterwarnings('ignore')
- 
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -26,15 +26,15 @@ from sklearn.metrics import (classification_report, confusion_matrix,
                              f1_score, precision_score, recall_score)
 from imblearn.over_sampling import SMOTE
 import joblib
- 
- 
+
+
 # ============================================================
 # STEP 1 - LOAD DATA
 # ============================================================
 print("=" * 55)
 print("STEP 1: Loading Dataset")
 print("=" * 55)
- 
+
 try:
     df = pd.read_csv('DataCoSupplyChainDataset.csv', encoding='latin-1')
     print(f"  Rows: {df.shape[0]:,}  |  Columns: {df.shape[1]}")
@@ -42,13 +42,13 @@ except FileNotFoundError:
     print("\n  ERROR: DataCoSupplyChainDataset.csv not found!")
     print("  Please download from Kaggle and place in this folder.")
     exit()
- 
- 
+
+
 # ============================================================
 # STEP 2 - DATA CLEANING
 # ============================================================
 print("\nSTEP 2: Cleaning Data")
- 
+
 # Drop columns that won't help prediction or leak the label
 useless_cols = [
     'Customer Fname', 'Customer Lname', 'Customer Street',
@@ -58,26 +58,26 @@ useless_cols = [
 ]
 useless_cols = [c for c in useless_cols if c in df.columns]
 df.drop(columns=useless_cols, inplace=True)
- 
+
 # Remove rows where target is missing
 df.dropna(subset=['Late_delivery_risk'], inplace=True)
- 
+
 # Fill numeric missing values with median
 for col in df.select_dtypes(include=[np.number]).columns:
     df[col].fillna(df[col].median(), inplace=True)
- 
+
 # Fill text missing values with most common value
 for col in df.select_dtypes(include='object').columns:
     df[col].fillna(df[col].mode()[0], inplace=True)
- 
+
 print(f"  Clean data shape: {df.shape}")
- 
- 
+
+
 # ============================================================
 # STEP 3 - FEATURE ENGINEERING
 # ============================================================
 print("\nSTEP 3: Engineering New Features")
- 
+
 # Gap between real and scheduled shipping days
 if ('Days for shipping (real)' in df.columns and
         'Days for shipment (scheduled)' in df.columns):
@@ -90,7 +90,7 @@ if ('Days for shipping (real)' in df.columns and
     )
     print("  + shipping_delay_gap")
     print("  + shipping_pressure_ratio")
- 
+
 # Order complexity
 if ('Order Item Quantity' in df.columns and
         'Order Item Discount Rate' in df.columns):
@@ -98,67 +98,67 @@ if ('Order Item Quantity' in df.columns and
         df['Order Item Quantity'] * df['Order Item Discount Rate']
     )
     print("  + order_complexity")
- 
+
 # Flag orders with negative profit (risky orders)
 if 'Order Item Profit Ratio' in df.columns:
     df['low_profit_flag'] = (df['Order Item Profit Ratio'] < 0).astype(int)
     print("  + low_profit_flag")
- 
+
 # High discount flag
 if 'Order Item Discount Rate' in df.columns:
     df['high_discount_flag'] = (df['Order Item Discount Rate'] > 0.2).astype(int)
     print("  + high_discount_flag")
- 
- 
+
+
 # ============================================================
 # STEP 4 - ENCODE CATEGORICAL COLUMNS
 # ============================================================
 print("\nSTEP 4: Encoding Categorical Variables")
- 
+
 le = LabelEncoder()
 cat_cols = df.select_dtypes(include='object').columns.tolist()
 print(f"  Encoding {len(cat_cols)} categorical columns")
- 
+
 for col in cat_cols:
     df[col] = le.fit_transform(df[col].astype(str))
- 
- 
+
+
 # ============================================================
 # STEP 5 - PREPARE X AND y
 # ============================================================
 print("\nSTEP 5: Preparing Features and Target")
- 
+
 target = 'Late_delivery_risk'
 X = df.drop(columns=[target])
 y = df[target]
- 
+
 print(f"  Target distribution:")
 vc = y.value_counts()
 for val, cnt in vc.items():
     label = "On Time" if val == 0 else "Late"
     print(f"    {label} ({val}): {cnt:,} ({cnt/len(y)*100:.1f}%)")
- 
+
 # Scale features
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 X_scaled = pd.DataFrame(X_scaled, columns=X.columns)
- 
+
 # Save for Streamlit app
 joblib.dump(scaler, 'scaler.pkl')
 joblib.dump(list(X.columns), 'feature_names.pkl')
 print("  Saved: scaler.pkl, feature_names.pkl")
- 
- 
+
+
 # ============================================================
 # STEP 6 - TRAIN/TEST SPLIT + SMOTE
 # ============================================================
 print("\nSTEP 6: Train/Test Split and SMOTE")
- 
+
 X_train, X_test, y_train, y_test = train_test_split(
     X_scaled, y, test_size=0.2, random_state=42, stratify=y
 )
 print(f"  Train: {len(X_train):,}  |  Test: {len(X_test):,}")
- 
+
 try:
     smote = SMOTE(random_state=42)
     X_train_bal, y_train_bal = smote.fit_resample(X_train, y_train)
@@ -166,13 +166,13 @@ try:
 except Exception as e:
     print(f"  SMOTE skipped ({e}), using raw train data")
     X_train_bal, y_train_bal = X_train, y_train
- 
- 
+
+
 # ============================================================
 # STEP 7 - TRAIN MODELS
 # ============================================================
 print("\nSTEP 7: Training Models")
- 
+
 models = {
     'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
     'Random Forest': RandomForestClassifier(
@@ -182,14 +182,14 @@ models = {
         n_estimators=100, random_state=42
     )
 }
- 
+
 results = {}
 for name, model in models.items():
     print(f"  Training {name}...", end=" ")
     model.fit(X_train_bal, y_train_bal)
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
- 
+
     results[name] = {
         'model': model,
         'auc': roc_auc_score(y_test, y_prob),
@@ -200,32 +200,32 @@ for name, model in models.items():
         'y_prob': y_prob
     }
     print(f"Done | AUC={results[name]['auc']:.3f} F1={results[name]['f1']:.3f}")
- 
- 
+
+
 # ============================================================
 # STEP 8 - SAVE BEST MODEL
 # ============================================================
 print("\nSTEP 8: Saving Best Model")
- 
+
 best_name = max(results, key=lambda x: results[x]['auc'])
 best_model = results[best_name]['model']
 joblib.dump(best_model, 'best_model.pkl')
- 
+
 # Save feature importance for Streamlit
 if hasattr(best_model, 'feature_importances_'):
     imp = pd.Series(best_model.feature_importances_, index=X.columns)
     joblib.dump(imp.nlargest(15), 'top_features.pkl')
- 
+
 print(f"  Best model: {best_name} (AUC = {results[best_name]['auc']:.4f})")
 print("  Saved: best_model.pkl, top_features.pkl")
- 
- 
+
+
 # ============================================================
 # STEP 9 - SAVE PLOTS
 # ============================================================
 print("\nSTEP 9: Generating and Saving Plots")
 os.makedirs('plots', exist_ok=True)
- 
+
 # Confusion matrices
 fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 fig.suptitle('Confusion Matrices - All Models', fontsize=14)
@@ -240,7 +240,7 @@ for i, (name, r) in enumerate(results.items()):
 plt.tight_layout()
 plt.savefig('plots/confusion_matrices.png', dpi=150)
 plt.close()
- 
+
 # ROC curves
 plt.figure(figsize=(8, 6))
 for name, r in results.items():
@@ -254,7 +254,7 @@ plt.legend()
 plt.tight_layout()
 plt.savefig('plots/roc_curves.png', dpi=150)
 plt.close()
- 
+
 # Feature importance
 if hasattr(best_model, 'feature_importances_'):
     imp = pd.Series(best_model.feature_importances_, index=X.columns)
@@ -266,7 +266,7 @@ if hasattr(best_model, 'feature_importances_'):
     plt.tight_layout()
     plt.savefig('plots/feature_importance.png', dpi=150)
     plt.close()
- 
+
 # Model comparison
 comp_df = pd.DataFrame(
     {n: [r['auc'], r['precision'], r['recall'], r['f1']]
@@ -281,10 +281,10 @@ plt.legend(loc='lower right')
 plt.tight_layout()
 plt.savefig('plots/model_comparison.png', dpi=150)
 plt.close()
- 
+
 print("  Saved all plots in /plots folder")
- 
- 
+
+
 # ============================================================
 # STEP 10 - PRINT SUMMARY
 # ============================================================
