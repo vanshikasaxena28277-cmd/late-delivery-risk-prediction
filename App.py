@@ -1,19 +1,29 @@
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report
+import streamlit as st
+import pandas as pd
 import pickle
 
-def train_model(X, y):
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+st.title("Late Delivery Risk Prediction")
 
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X_train, y_train)
+# Load model
+model = pickle.load(open("models/model.pkl", "rb"))
 
-    y_pred = model.predict(X_test)
-    print(classification_report(y_test, y_pred))
+# Upload data
+file = st.file_uploader("Upload CSV")
 
-    # Save model
-    with open("models/model.pkl", "wb") as f:
-        pickle.dump(model, f)
+if file:
+    df = pd.read_csv(file)
 
-    return model
+    st.write("Data Preview", df.head())
+
+    if st.button("Predict Risk"):
+        X = df.drop(['Late_delivery_risk'], axis=1, errors='ignore')
+
+        predictions = model.predict(X)
+
+        df['Predicted Risk'] = predictions
+
+        st.write(df[['Predicted Risk']])
+
+        high_risk = df[df['Predicted Risk'] == 1]
+
+        st.write("High Risk Orders:", high_risk.shape[0])
